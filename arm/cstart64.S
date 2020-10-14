@@ -23,6 +23,7 @@
 9997:
 .endm
 
+#ifndef TARGET_EFI
 .section .init
 
 /*
@@ -91,12 +92,16 @@ start:
 	/* set up exception handling */
 	bl	exceptions_init
 
-	/* complete setup */
+	/* complete setup and run */
 	adrp	x1, stacktop
 	add	x1, x1, :lo12:stacktop		// x1 is the base of free memory
 	bl	setup				// x0 is the addr of the dtb
+	b	run_main
+#endif
 
-	/* run the test */
+.text
+
+run_main:
 	adrp	x0, __argc
 	ldr	w0, [x0, :lo12:__argc]
 	adrp	x1, __argv
@@ -107,7 +112,25 @@ start:
 	bl	exit
 	b	halt
 
-.text
+/*
+ * Used by cpu0 to setup the system and start the actual test.
+ * x0 is the address of the dtb
+ * x1 is the start of the free memory
+ * x2 is the top of the stack
+*/
+.globl primary_entry
+primary_entry:
+	/* set up stack */
+	mov	x4, #1
+	msr	spsel, x4
+	isb
+	sub	x2, x2, 16			// stackptr must be strictly
+						// less than stacktop
+	mov	sp, x2
+
+	bl	setup
+	b	run_main
+
 
 /*
  * psci_invoke_hvc / psci_invoke_smc
@@ -129,12 +152,6 @@ psci_invoke_hvc:
 .globl psci_invoke_smc
 psci_invoke_smc:
 	smc	#0
-	ret
-
-get_mmu_off:
-	adrp	x0, auxinfo
-	ldr	x0, [x0, :lo12:auxinfo + 8]
-	and	x0, x0, #AUXINFO_MMU_OFF
 	ret
 
 .globl secondary_entry
@@ -165,6 +182,12 @@ secondary_entry:
 	/* x0 is now the entry function, run it */
 	blr	x0
 	b	do_idle
+
+get_mmu_off:
+	adrp	x0, auxinfo
+	ldr	x0, [x0, :lo12:auxinfo + 8]
+	and	x0, x0, #AUXINFO_MMU_OFF
+	ret
 
 .globl halt
 halt:
@@ -276,6 +299,7 @@ asm_mmu_disable:
  * Vectors
  */
 
+.globl exceptions_init
 exceptions_init:
 	adrp	x4, vector_table
 	add	x4, x4, :lo12:vector_table

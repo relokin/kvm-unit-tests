@@ -41,6 +41,28 @@ LIBFDT_archive = $(LIBFDT_objdir)/libfdt.a
 
 OBJDIRS += $(LIBFDT_objdir)
 
+# EFI App
+ifeq ($(TARGET_EFI),y)
+EFI_INCLUDES = -I /usr/include/efi
+ifeq ($(ARCH_NAME),aarch64)
+EFI_INCLUDES += -I /usr/include/efi/aa64
+EFI_INCLUDES += -I /usr/include/efi/aarch64
+else ifeq ($(ARCH_NAME),x86_64)
+EFI_INCLUDES += -I /usr/include/efi/x64
+else
+$(error Cannot build $(ARCH_NAME) tests as EFI apps)
+endif
+EFI_CRTOBJ = $(TEST_DIR)/efi/crt0-efi-$(ARCH_NAME).o
+EFI_CFLAGS = -DTARGET_EFI $(EFI_INCLUDES) \
+	     -fpic -fshort-wchar -fno-stack-check -fno-merge-all-constants \
+	     -Wno-error=missing-prototypes -Wno-error=strict-prototypes -Wno-error=pragmas
+EFI_LDFLAGS = -nostdlib --defsym=EFI_SUBSYSTEM=0xa -shared -Bsymbolic $(EFI_CRTOBJ) \
+	      --warn-common --no-undefined --fatal-warnings --build-id=sha1
+EFI_LIBS = -lgnuefi -lefi
+efi_clean = efi_clean
+.PRECIOUS: %.so
+endif
+
 #include architecture specific make rules
 include $(SRCDIR)/$(TEST_DIR)/Makefile
 
@@ -65,9 +87,13 @@ COMMON_CFLAGS += $(fno_stack_protector)
 COMMON_CFLAGS += $(fno_stack_protector_all)
 COMMON_CFLAGS += $(wno_frame_address)
 COMMON_CFLAGS += $(if $(U32_LONG_FMT),-D__U32_LONG_FMT__,)
-COMMON_CFLAGS += $(fno_pic) $(no_pie)
 COMMON_CFLAGS += $(wclobbered)
 COMMON_CFLAGS += $(wunused_but_set_parameter)
+ifeq ($(TARGET_EFI),y)
+COMMON_CFLAGS += $(EFI_CFLAGS)
+else
+COMMON_CFLAGS += $(fno_pic) $(no_pie)
+endif
 
 CFLAGS += $(COMMON_CFLAGS)
 CFLAGS += $(wmissing_parameter_type)
@@ -110,9 +136,12 @@ install: standalone
 	mkdir -p $(DESTDIR)
 	install tests/* $(DESTDIR)
 
-clean: arch_clean libfdt_clean
+clean: arch_clean libfdt_clean $(efi_clean)
 	$(RM) $(LIBFDT_archive)
 	$(RM) lib/.*.d $(libcflat) $(cflatobjs)
+
+efi_clean:
+	$(RM) $(TEST_DIR)/*.so $(TEST_DIR)/*.efi lib/efi.o
 
 distclean: clean
 	$(RM) lib/asm lib/config.h config.mak $(TEST_DIR)-run msr.out cscope.* build-head

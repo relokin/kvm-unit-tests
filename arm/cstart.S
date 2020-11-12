@@ -179,6 +179,7 @@ halt:
 .globl asm_mmu_enable
 asm_mmu_enable:
 	/* TLBIALL */
+	mov	r2, #0
 	mcr	p15, 0, r2, c8, c7, 0
 	dsb	nsh
 
@@ -211,12 +212,7 @@ asm_mmu_enable:
 
 .globl asm_mmu_disable
 asm_mmu_disable:
-	/* SCTLR */
-	mrc	p15, 0, r0, c1, c0, 0
-	bic	r0, #CR_M
-	mcr	p15, 0, r0, c1, c0, 0
-	isb
-
+	/* Clean + invalidate the entire memory */
 	ldr	r0, =__phys_offset
 	ldr	r0, [r0]
 	ldr	r1, =__phys_end
@@ -224,7 +220,25 @@ asm_mmu_disable:
 	sub	r1, r1, r0
 	dcache_by_line_op dccimvac, sy, r0, r1, r2, r3
 
-	mov     pc, lr
+	/* Invalidate Icache */
+	mov	r0, #0
+	mcr	p15, 0, r0, c7, c5, 0
+	isb
+
+	/*  Disable cache, Icache and MMU */
+	mrc	p15, 0, r0, c1, c0, 0
+	bic	r0, #CR_C
+	bic	r0, #CR_I
+	bic	r0, #CR_M
+	mcr	p15, 0, r0, c1, c0, 0
+	isb
+
+	/* Invalidate TLB */
+	mov	r0, #0
+	mcr	p15, 0, r0, c8, c7, 0
+	dsb	nsh
+
+	mov	pc, lr
 
 /*
  * Vectors

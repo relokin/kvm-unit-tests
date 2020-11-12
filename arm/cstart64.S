@@ -246,11 +246,6 @@ asm_mmu_enable:
 
 .globl asm_mmu_disable
 asm_mmu_disable:
-	mrs	x0, sctlr_el1
-	bic	x0, x0, SCTLR_EL1_M
-	msr	sctlr_el1, x0
-	isb
-
 	/* Clean + invalidate the entire memory */
 	adrp	x0, __phys_offset
 	ldr	x0, [x0, :lo12:__phys_offset]
@@ -258,6 +253,22 @@ asm_mmu_disable:
 	ldr	x1, [x1, :lo12:__phys_end]
 	sub	x1, x1, x0
 	dcache_by_line_op civac, sy, x0, x1, x2, x3
+
+	/* Invalidate Icache */
+	ic	iallu
+	isb
+
+	/* Disable cache, Icache and MMU */
+	mrs	x0, sctlr_el1
+	bic	x0, x0, SCTLR_EL1_C
+	bic	x0, x0, SCTLR_EL1_I
+	bic	x0, x0, SCTLR_EL1_M
+	msr	sctlr_el1, x0
+	isb
+
+	/* Invalidate TLB */
+	tlbi	vmalle1
+	dsb	nsh
 
 	ret
 

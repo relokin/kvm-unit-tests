@@ -192,6 +192,16 @@ elif [ "$arch" = "arm" ] || [ "$arch" = "arm64" ]; then
         config_vmm="#define CONFIG_SEATTLE"
         arm_uart_early_addr=0xe1010000
         errata_force=1
+    elif [ "$vmm" = "n1sdp" ]; then
+            if [ "$arch" != "arm64" ]; then
+		    echo "--vmm=n1sdp is only for arm64"
+		    exit 1
+            elif [ -z "$target_efi" ]; then
+		    echo "--target-efi must be selected with --vmm=n1sdp"
+		    exit 1
+            fi
+            [ "$processor" = "max" ] && processor=neoverse-n1
+            arm_uart_early_addr=0x2a400000
     else
         echo '--vmm must be one of "qemu" or "kvmtool"!'
         usage

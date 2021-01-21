@@ -197,12 +197,6 @@ static void mem_init(phys_addr_t freemem_start)
 	}
 	assert(mem.end);
 
-	/* Check for holes */
-	r = mem_region_find(mem.start);
-	while (r && r->end != mem.end)
-		r = mem_region_find(r->end);
-	assert(r);
-
 	/* Ensure our selected freemem region is somewhere in our full range */
 	assert(freemem_start >= mem.start && freemem->end <= mem.end);
 
@@ -302,12 +296,6 @@ void setup(const void *fdt, phys_addr_t freemem_start)
 
 	if (target_efi()) {
 		mem_init(freemem_start);
-		/*
-		 * dcache_line_size must be set and mem_init must be called before
-		 * asm_mmu_disable, because we need __phys_offset, __phys_end, and
-		 * dcache_line_size set to clear and invalidate all memory.
-		 */
-		asm_mmu_disable();
 	} else {
 		mem_regions_init();
 		mem_init(freemem_start);

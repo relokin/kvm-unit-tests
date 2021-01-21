@@ -87,6 +87,29 @@ run_main:
 	b	halt
 
 /*
+ * dcache_line_size - get the safe D-cache line size across all CPUs
+ */
+.macro get_dcache_line_size, reg, tmp
+	mrs     \reg, ctr_el0                   // read CTR
+	ubfm            \tmp, \tmp, #16, #19    // cache line size encoding
+	mov             \reg, #4                // bytes per word
+	lsl             \reg, \reg, \tmp        // actual cache line size
+.endm
+
+/* Taken with small changes from arch/arm64/include/asm/assembler.h */
+.macro dcache_by_line_op op, domain, start, end, tmp1, tmp2
+	get_dcache_line_size \tmp1, \tmp2
+	sub	\tmp2, \tmp1, #1
+	bic	\start, \start, \tmp2
+9998:
+	dc	\op, \start
+	add	\start, \start, \tmp1
+	cmp	\start, \end
+	b.lo	9998b
+	dsb	\domain
+.endm
+
+/*
  * Used by cpu0 to setup the system and start the actual test.
  * x0 is the address of the dtb
  * x1 is the start of the free memory and the top of the stack
@@ -94,13 +117,48 @@ run_main:
  */
 .globl primary_entry
 primary_entry:
+	mov	x10, x0
+	mov	x11, x1
+	mov	x12, x2
+
+	adrp	x0, _text
+	add	x0, x0, :lo12:_text
+	adrp	x1, _etext
+	add	x1, x1, :lo12:_etext
+
+	dcache_by_line_op civac, sy, x0, x1, x2, x3
+	ic	ialluis
+
+0:
+	/* Turn off Dcache and MMU */
+	mrs	x0, CurrentEL
+	cmp	x0, #CurrentEL_EL2
+	b.ne	1f
+	mrs	x0, sctlr_el2
+	bic	x0, x0, SCTLR_EL1_M
+	bic	x0, x0, SCTLR_EL1_C
+	isb
+	msr	sctlr_el2, x0
+	isb
+	b	2f
+1:
+	mrs	x0, sctlr_el1
+	bic	x0, x0, SCTLR_EL1_M
+	bic	x0, x0, SCTLR_EL1_C
+	isb
+	msr	sctlr_el1, x0
+	isb
+2:
 	/* set up stack */
 	mov	x4, #1
 	msr	spsel, x4
 	isb
-	mov	sp, x2
+	mov	sp, x12
 
+	mov	x0, x10
+	mov	x1, x11
 	bl	setup
+
 	b	run_main
 
 .globl secondary_entry
@@ -215,20 +273,6 @@ asm_mmu_enable:
 	isb
 
 	ret
-
-/* Taken with small changes from arch/arm64/include/asm/assembler.h */
-.macro dcache_by_line_op op, domain, start, end, tmp1, tmp2
-	adrp	\tmp1, dcache_line_size
-	ldr	\tmp1, [\tmp1, :lo12:dcache_line_size]
-	sub	\tmp2, \tmp1, #1
-	bic	\start, \start, \tmp2
-9998:
-	dc	\op, \start
-	add	\start, \start, \tmp1
-	cmp	\start, \end
-	b.lo	9998b
-	dsb	\domain
-.endm
 
 .globl asm_mmu_disable
 asm_mmu_disable:

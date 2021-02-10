@@ -16,6 +16,8 @@
 #define ICC_EOIR1_EL1			sys_reg(3, 0, 12, 12, 1)
 #define ICC_GRPEN1_EL1			sys_reg(3, 0, 12, 12, 7)
 
+#define ICC_SRE_EL2			sys_reg(3, 4, 12, 9, 5)
+
 #ifndef __ASSEMBLY__
 
 #include <libcflat.h>

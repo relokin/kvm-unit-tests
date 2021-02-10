@@ -7,6 +7,7 @@
  */
 #define __ASSEMBLY__
 #include <auxinfo.h>
+#include <asm/arch_gicv3.h>
 #include <asm/asm-offsets.h>
 #include <asm/ptrace.h>
 #include <asm/processor.h>
@@ -109,6 +110,64 @@ run_main:
 	dsb	\domain
 .endm
 
+drop_to_el1:
+	ldr	x4, =SCTLR_EL2_RES1
+	msr	sctlr_el2, x4
+	isb
+
+	ldr	x4, =HCR_HOST_NVHE_FLAGS
+	msr	hcr_el2, x4
+	isb
+
+	ldr	x4, =SCTLR_EL1_RES1
+	msr	sctlr_el1, x4
+
+	mrs	x4, cnthctl_el2
+	/* Enable EL1 physical timers. */
+	orr	x4, x4, #3
+	msr	cnthctl_el2, x4
+	/* Clear the timer virtual offset. */
+	msr	cntvoff_el2, xzr
+
+	mrs	x4,  id_aa64dfr0_el1
+	sbfx	x5, x4, #8, #4
+	cmp	x5, #1
+	b.lt	1f
+	mrs	x4, pmcr_el0
+	ubfx	x4, x4, #11, #5
+	/* Disable traps, allow access to all PMU counters */
+	msr	mdcr_el2, x4
+
+1:
+	mrs	x4, id_aa64pfr0_el1
+	ubfx	x4, x4, #24, #4
+	cbz	x4, 2f
+
+	/* Allow access to the GICv3 CPU interface */
+	mrs_s	x4, ICC_SRE_EL2
+	orr	x4, x4, #(1 << 0)
+	orr	x4, x4, #(1 << 3)
+	msr_s	ICC_SRE_EL2, x4
+	isb
+
+2:
+	mrs	x4, midr_el1
+	msr	vpidr_el2, x4
+	mrs	x4, mpidr_el1
+	msr	vmpidr_el2, x4
+
+	ldr	x4, =CPTR_EL2_RES1
+	msr	cptr_el2, x4
+
+	ldr	x4, =INIT_PSTATE_EL1
+	msr	spsr_el2, x4
+
+	msr	vttbr_el2, xzr
+	msr	vbar_el2, xzr
+	msr	elr_el2, lr
+
+	eret
+
 /*
  * Used by cpu0 to setup the system and start the actual test.
  * x0 is the address of the dtb
@@ -134,13 +193,8 @@ primary_entry:
 	mrs	x0, CurrentEL
 	cmp	x0, #CurrentEL_EL2
 	b.ne	1f
-	mrs	x0, sctlr_el2
-	bic	x0, x0, SCTLR_EL1_M
-	bic	x0, x0, SCTLR_EL1_C
-	isb
-	msr	sctlr_el2, x0
-	isb
-	b	2f
+	bl drop_to_el1
+
 1:
 	mrs	x0, sctlr_el1
 	bic	x0, x0, SCTLR_EL1_M
@@ -155,6 +209,10 @@ primary_entry:
 	isb
 	mov	sp, x12
 
+	/* enable FP/ASIMD */
+	mov	x4, #(3 << 20)
+	msr	cpacr_el1, x4
+
 	mov	x0, x10
 	mov	x1, x11
 	bl	setup
@@ -163,6 +221,11 @@ primary_entry:
 
 .globl secondary_entry
 secondary_entry:
+	mrs	x0, CurrentEL
+	cmp	x0, #CurrentEL_EL2
+	b.ne	0f
+	bl	drop_to_el1
+0:
 	/* Enable FP/ASIMD */
 	mov	x0, #(3 << 20)
 	msr	cpacr_el1, x0

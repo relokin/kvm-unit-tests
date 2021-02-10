@@ -70,4 +70,17 @@ asm(
 "	.endm\n"
 );
 #endif /* __ASSEMBLY__ */
+
+#define SCTLR_EL1_RES1	(_BITUL(7) | _BITUL(8) | _BITUL(11) | _BITUL(20) | _BITUL(22) | \
+			 _BITUL(23) | _BITUL(28) | _BITUL(29))
+
+#define SCTLR_EL2_RES1	(_BITUL(4) | _BITUL(5) | _BITUL(11) | _BITUL(16) | \
+			 _BITUL(18) | _BITUL(22) | _BITUL(23) | _BITUL(28) | \
+			 _BITUL(29))
+#define CPTR_EL2_RES1	(UL(0xff) | _BITUL(9) | _BITUL(12) | _BITUL(13))
+
+#define HCR_RW_SHIFT	31
+#define HCR_RW		(UL(1) << HCR_RW_SHIFT)
+#define HCR_HOST_NVHE_FLAGS	HCR_RW
+
 #endif /* _ASMARM64_SYSREG_H_ */

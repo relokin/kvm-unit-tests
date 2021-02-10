@@ -48,6 +48,8 @@
 #define PSR_x		0x0000ff00	/* Extension            */
 #define PSR_c		0x000000ff	/* Control              */
 
+#define INIT_PSTATE_EL1	(PSR_D_BIT | PSR_A_BIT | PSR_I_BIT | PSR_F_BIT | PSR_MODE_EL1h)
+
 #ifndef __ASSEMBLY__
 #include <libcflat.h>
 

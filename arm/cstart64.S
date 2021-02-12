@@ -115,17 +115,15 @@ run_main:
 /*
  * Used by cpu0 to setup the system and start the actual test.
  * x0 is the address of the dtb
- * x1 is the start of the free memory
+ * x1 is the start of the free memory and the top of the stack
  * x2 is the top of the stack
-*/
+ */
 .globl primary_entry
 primary_entry:
 	/* set up stack */
 	mov	x4, #1
 	msr	spsel, x4
 	isb
-	sub	x2, x2, 16			// stackptr must be strictly
-						// less than stacktop
 	mov	sp, x2
 
 	bl	setup

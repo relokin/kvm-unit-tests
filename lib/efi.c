@@ -30,7 +30,7 @@ extern char *__argv[100];
 extern char *__environ[200];
 extern struct mem_region *mem_regions;
 
-extern void primary_entry(void *fdt, uint64_t freemem_start, uint64_t stacktop);
+extern void primary_entry(void *fdt, uint64_t freemem_start, uint64_t stack);
 
 static EFI_GUID efi_var_guid = VAR_GUID;
 
@@ -330,24 +330,18 @@ static uint64_t efi_set_mem_regions(UINTN *MapKey)
 	return freemem_start;
 }
 
-static uint64_t efi_allocate_stack(void)
+static uint64_t efi_allocate_stack(uint64_t *freemem_start)
 {
-	EFI_STATUS Status;
-	EFI_PHYSICAL_ADDRESS Memory;
-	UINTN Pages;
 	uint64_t stack;
 
-	Pages = EFI_SIZE_TO_PAGES(2 * MIN_STACK_SIZE - 1);
-
-	Status = uefi_call_wrapper(BS->AllocatePages, 4, AllocateAnyPages,
-				   EfiRuntimeServicesData, Pages, &Memory);
-	ASSERT(Status == EFI_SUCCESS);
-
 	/* Naturally align the stack base */
-	stack = ((uint64_t)(UINTN)Memory + MIN_STACK_SIZE - 1) & ~(MIN_STACK_SIZE - 1);
+	stack = (*freemem_start + THREAD_ALIGNMENT - 1) & ~(THREAD_ALIGNMENT - 1);
+
+	/* Make space for the stack in the memory */
+	*freemem_start = stack + THREAD_SIZE;
 
 	/* Return the stack top */
-	return stack + MIN_STACK_SIZE;
+	return stack + THREAD_START_SP;
 }
 
 EFI_STATUS efi_main(EFI_HANDLE Image, EFI_SYSTEM_TABLE *SysTab);
@@ -356,7 +350,7 @@ EFI_STATUS efi_main(EFI_HANDLE Image, EFI_SYSTEM_TABLE *SysTab)
 {
 	EFI_STATUS Status;
 	UINTN MapKey;
-	uint64_t freemem_start, stacktop;
+	uint64_t freemem_start, stack;
 	void *fdt;
 
 	InitializeLib(Image, SysTab);
@@ -365,15 +359,15 @@ EFI_STATUS efi_main(EFI_HANDLE Image, EFI_SYSTEM_TABLE *SysTab)
 
 	fdt = efi_get_fdt(Image, SysTab);
 
-	stacktop = efi_allocate_stack();
-//	Print(L"stacktop=%lx\n", stacktop);
-
 	freemem_start = efi_set_mem_regions(&MapKey);
+	stack = efi_allocate_stack(&freemem_start);
+	//Print(L"freem_mem=%lx\n", freemem_start);
+	//Print(L"stack=%lx\n", stack);
 
 	Status = uefi_call_wrapper(BS->ExitBootServices, 2, Image, MapKey);
 	ASSERT(Status == EFI_SUCCESS);
 
-	primary_entry(fdt, freemem_start, stacktop);
+	primary_entry(fdt, freemem_start, stack);
 
 	/* Unreachable */
 	return EFI_UNSUPPORTED;

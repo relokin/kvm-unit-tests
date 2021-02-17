@@ -267,6 +267,7 @@ void setup(const void *fdt, phys_addr_t freemem_start)
 	if (target_efi()) {
 		exceptions_init();
 		printf("Load address: %" PRIxPTR "\n", text);
+		memset(current_thread_info(), 0, sizeof(struct thread_info));
 	}
 
 	/* Move the FDT to the base of free memory */

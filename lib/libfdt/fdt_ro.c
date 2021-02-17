@@ -164,7 +164,7 @@ int fdt_path_offset(const void *fdt, const char *path)
 
 	/* see if we have an alias */
 	if (*path != '/') {
-		const char *q = strchr(path, '/');
+		const char *q = strchr(path, ':');
 
 		if (!q)
 			q = end;

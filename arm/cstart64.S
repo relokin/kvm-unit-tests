@@ -303,6 +303,32 @@ asm_mmu_disable:
 	ret
 
 /*
+ * asm_clean_dcache_area_poc - Clean dcache region to PoC
+ *   Inputs:
+ *     x0 start of area
+ *     x1 area size
+ */
+.globl asm_clean_dcache_area_poc
+asm_clean_dcache_area_poc:
+	dcache_by_line_op cvac, sy, x0, x1, x2, x3
+	ret
+
+/*
+ * asm_inval_dcache_area_poc - Invalidate dcache region to PoC
+ *   Inputs:
+ *     x0 start of area
+ *     x1 area size
+ *
+ * Must be called with MMU disabled, otherwise the CPU can speculate reads and
+ * allocate cache lines from the invalidated area.
+ */
+.globl asm_inval_dcache_area_poc
+asm_inval_dcache_area_poc:
+	dcache_by_line_op civac, sy, x0, x1, x2, x3
+	ret
+
+
+/*
  * Vectors
  */
 

@@ -27,6 +27,7 @@ erratatxt="$srcdir/errata.txt"
 host_key_document=
 page_size=
 target_efi=
+ext_dir=
 
 usage() {
     cat <<-EOF
@@ -56,6 +57,7 @@ usage() {
 	                           Specify the page size (translation granule) (4k, 16k or
 	                           64k, default is 64k, arm64 only)
 	    --target-efi	   Compile tests as EFI apps that can be run from UEFI
+	    --ext-dir=DIR	   Add DIR/Makefile to the build system (arm/arm64 only)
 EOF
     exit 1
 }
@@ -116,6 +118,9 @@ while [[ "$1" = -* ]]; do
 	    ;;
 	--target-efi)
 	    target_efi=y
+	    ;;
+	--ext-dir)
+	    ext_dir="$arg"
 	    ;;
 	--help)
 	    usage
@@ -301,6 +306,7 @@ WA_DIVIDE=$wa_divide
 GENPROTIMG=${GENPROTIMG-genprotimg}
 HOST_KEY_DOCUMENT=$host_key_document
 TARGET_EFI=$target_efi
+EXT_DIR=$ext_dir
 EOF
 
 cat <<EOF > lib/config.h

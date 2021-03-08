@@ -14,6 +14,10 @@ tests-common += $(TEST_DIR)/sieve.$(exe)
 tests-common += $(TEST_DIR)/pl031.$(exe)
 tests-common += $(TEST_DIR)/cmd.$(exe)
 
+ifdef EXT_DIR
+include $(EXT_DIR)/Makefile
+endif
+
 tests-all = $(tests-common) $(tests)
 all: directories $(tests-all)
 

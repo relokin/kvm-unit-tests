@@ -102,9 +102,17 @@ endif
 $(libeabi): $(eabiobjs)
 	$(AR) rcs $@ $^
 
-arm_clean: libfdt_clean asm_offsets_clean
-	$(RM) $(TEST_DIR)/*.{o,flat,elf} $(libeabi) $(eabiobjs) \
-	      $(TEST_DIR)/.*.d lib/arm/.*.d
+arm_obj_clean:
+	$(RM) $(tests-all:.$(exe)=.o)
+ifeq ($(TARGET_EFI),y)
+	$(RM) $(tests-all:.$(exe)=.so)
+else
+	$(RM) $(tests-all:.$(exe)=.elf)
+endif
+
+arm_clean: libfdt_clean asm_offsets_clean arm_obj_clean
+	$(RM) $(tests-all) $(libeabi) $(eabiobjs) $(cflatobjs) $(cstart.o)
+	$(RM) $(TEST_DIR)/.*.d lib/arm/.*.d
 
 generated-files = $(asm-offsets)
 $(tests-all:.$(exe)=.o) $(cstart.o) $(cflatobjs): $(generated-files)

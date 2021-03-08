@@ -63,7 +63,6 @@ EFI_CFLAGS = -DTARGET_EFI -DEFI_DEBUG $(EFI_INCLUDES) \
 EFI_LDFLAGS = -nostdlib --defsym=EFI_SUBSYSTEM=0xa -shared -Bsymbolic $(EFI_CRTOBJ) \
 	      --warn-common --no-undefined --fatal-warnings --build-id=sha1
 EFI_LIBS = -lgnuefi -lefi
-efi_clean = efi_clean
 .PRECIOUS: %.so
 endif
 
@@ -139,16 +138,13 @@ install: standalone
 	mkdir -p $(DESTDIR)
 	install tests/* $(DESTDIR)
 
-clean: arch_clean $(efi_clean)
+clean: arch_clean
 	$(RM) lib/.*.d $(libcflat) $(cflatobjs)
 
 libfdt_clean:
 	$(RM) $(LIBFDT_archive) \
 	$(addprefix $(LIBFDT_objdir)/,$(LIBFDT_OBJS)) \
 	$(LIBFDT_objdir)/.*.d
-
-efi_clean:
-	$(RM) $(TEST_DIR)/*.so $(TEST_DIR)/*.efi lib/efi.o
 
 distclean: clean libfdt_clean
 	$(RM) lib/asm lib/config.h config.mak $(TEST_DIR)-run msr.out cscope.* build-head

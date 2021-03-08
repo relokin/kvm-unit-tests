@@ -91,7 +91,7 @@ fi
 [ "$EFI_SMP" ] && EFI_SMP="-smp $EFI_SMP"
 
 if [ "$ARCH" = "arm64" ] && [ ! -f "$EFI_TESTS/dtb" ]; then
-	DTBFILE="$EFI_TESTS/dtb" arm/run $EFI_SMP
+	DTBFILE="$EFI_TESTS/dtb" arm/run $EFI_SMP $EFI_OPTS
 fi
 
 if [ -f "$TEST_DIR/cmd.efi" ]; then

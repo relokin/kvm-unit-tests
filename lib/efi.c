@@ -23,7 +23,7 @@ static void _no_assert(bool a) {}
 
 #define VAR_GUID \
 	{ 0x97ef3e03, 0x7329, 0x4a6a, {0xb9, 0xba, 0x6c, 0x1f, 0xdc, 0xc5, 0xf8, 0x23} }
-#define DTB_BASENAME L"\\dtb"
+#define DTB_BASENAME L"dtb"
 
 extern int __argc, __envc;
 extern char *__argv[100];
@@ -100,34 +100,6 @@ static void efi_setup_argv(EFI_HANDLE Image, EFI_SYSTEM_TABLE *SysTab)
 }
 
 /*
- * Generate a file path given the loaded image's path.
- */
-static void efi_generate_path(EFI_LOADED_IMAGE *LoadedImage,
-			      const CHAR16 *ImagePath,
-			      CHAR16 **PathName)
-{
-	CHAR16 *CurrPath = DevicePathToStr(LoadedImage->FilePath);
-	unsigned int path_len = StrLen(CurrPath);
-	int i;
-
-	for (i = path_len; i > 0; --i) {
-		if (CurrPath[i] == '\\')
-			break;
-	}
-	CurrPath[i+1] = 0;
-
-	if (i == 0 || CurrPath[i-1] == '\\')
-		CurrPath[i] = 0;
-
-	*PathName = AllocatePool(StrSize(CurrPath) + StrSize(ImagePath));
-	ASSERT(*PathName);
-
-	*PathName[0] = 0;
-	StrCat(*PathName, CurrPath);
-	StrCat(*PathName, ImagePath);
-}
-
-/*
  * Open the file and read it into a buffer.
  */
 static void efi_load_image(EFI_LOADED_IMAGE *LoadedImage, void **data,
@@ -201,7 +173,7 @@ static void *efi_get_fdt(EFI_HANDLE Image, EFI_SYSTEM_TABLE *SysTab)
 	EFI_GUID LoadedImageProtocol = LOADED_IMAGE_PROTOCOL;
 	EFI_LOADED_IMAGE *LoadedImage;
 	EFI_STATUS Status;
-	CHAR16 Name[256], *Val, *PathName = NULL;
+	CHAR16 Name[256], *Val;
 	UINTN ValSize;
 	void *fdt = NULL;
 	int fdtsize;
@@ -210,8 +182,7 @@ static void *efi_get_fdt(EFI_HANDLE Image, EFI_SYSTEM_TABLE *SysTab)
 	Val = LibGetVariableAndSize(Name, &efi_var_guid, &ValSize);
 	if (Val) {
 		__efi_dtb_basename = AllocateZeroPool(ValSize + 2 * sizeof(CHAR16));
-		__efi_dtb_basename[0] = '\\';
-		CopyMem(&__efi_dtb_basename[1], Val, ValSize);
+		CopyMem(__efi_dtb_basename, Val, ValSize);
 		FreePool(Val);
 		efi_dtb_basename = __efi_dtb_basename;
 	}
@@ -221,13 +192,8 @@ static void *efi_get_fdt(EFI_HANDLE Image, EFI_SYSTEM_TABLE *SysTab)
 				   &LoadedImageProtocol, (void **)&LoadedImage);
 	ASSERT(Status == EFI_SUCCESS);
 
-	/* Build the new path from the existing one plus the dtb name */
-	efi_generate_path(LoadedImage, efi_dtb_basename, &PathName);
-
 	/* Load the dtb */
-	efi_load_image(LoadedImage, &fdt, &fdtsize, PathName);
-
-	FreePool(PathName);
+	efi_load_image(LoadedImage, &fdt, &fdtsize, (CHAR16 *)efi_dtb_basename);
 
 	return fdt;
 }

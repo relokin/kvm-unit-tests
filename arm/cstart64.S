@@ -115,8 +115,9 @@ run_main:
 /*
  * Used by cpu0 to setup the system and start the actual test.
  * x0 is the address of the dtb
- * x1 is the start of the free memory and the top of the stack
+ * x1 is the start of the free memory
  * x2 is the top of the stack
+ * x3 is the size of the dtb
  */
 .globl primary_entry
 primary_entry:
@@ -125,6 +126,37 @@ primary_entry:
 	msr	spsel, x4
 	isb
 	mov	sp, x2
+
+        /* Clean + invalidate the code */
+	adrp	x4, _text
+	ldr	x4, [x4, :lo12:_text]
+	adrp	x5, _etext
+	ldr	x5, [x5, :lo12:_etext]
+	sub	x5, x5, x4
+	dcache_by_line_op civac, sy, x4, x5, x6, x7
+
+        /* Clean + invalidate the dtb segment */
+	dcache_by_line_op civac, sy, x0, x3, x6, x7
+
+	/* Invalidate Icache */
+	ic	iallu
+	isb
+
+	/* Disable cache, Icache and MMU */
+	mrs	x4, sctlr_el1
+	bic	x4, x4, SCTLR_EL1_C
+	bic	x4, x4, SCTLR_EL1_I
+	bic	x4, x4, SCTLR_EL1_M
+	msr	sctlr_el1, x4
+	isb
+
+	/* Invalidate TLB */
+	tlbi	vmalle1
+	dsb	nsh
+
+	/* zero and set up stack */
+	sub	x4, x2, #THREAD_SIZE
+	zero_range x4, x2
 
 	bl	setup
 	b	run_main

@@ -289,7 +289,6 @@ void setup(const void *fdt, phys_addr_t freemem_start)
 
 	if (target_efi()) {
 		mem_init(freemem_start);
-		asm_mmu_disable();
 	} else {
 		mem_regions_add_dt_regions();
 		mem_regions_add_assumed();

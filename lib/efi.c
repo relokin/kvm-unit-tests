@@ -13,6 +13,7 @@
 #undef ALIGN
 #include <efi.h>
 #include <efilib.h>
+#include <libfdt/libfdt.h>
 
 #ifndef EFI_DEBUG
 #undef ASSERT
@@ -30,7 +31,7 @@ extern char *__argv[100];
 extern char *__environ[200];
 extern struct mem_region *mem_regions;
 
-extern void primary_entry(void *fdt, uint64_t freemem_start, uint64_t stack);
+extern void primary_entry(void *fdt, uint64_t freemem_start, uint64_t stack, uint64_t fdt_size);
 
 static EFI_GUID efi_var_guid = VAR_GUID;
 
@@ -333,7 +334,7 @@ EFI_STATUS efi_main(EFI_HANDLE Image, EFI_SYSTEM_TABLE *SysTab)
 	Status = uefi_call_wrapper(BS->ExitBootServices, 2, Image, MapKey);
 	ASSERT(Status == EFI_SUCCESS);
 
-	primary_entry(fdt, freemem_start, stack);
+	primary_entry(fdt, freemem_start, stack, fdt_totalsize(fdt));
 
 	/* Unreachable */
 	return EFI_UNSUPPORTED;

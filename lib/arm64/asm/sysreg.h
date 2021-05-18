@@ -94,4 +94,48 @@ asm(
 #define INIT_SCTLR_EL1_MMU_OFF	\
 			SCTLR_EL1_RES1
 
+#define SCTLR_EL2_RES1 (_BITUL(4) | _BITUL(5) | _BITUL(11) | _BITUL(16) | 	\
+			_BITUL(18) | _BITUL(22) | _BITUL(23) | _BITUL(28) |	\
+			_BITUL(29))
+
+
+#define HCR_RW_SHIFT		31
+#define HCR_RW			(UL(1) << HCR_RW_SHIFT)
+#define HCR_HOST_NVHE_FLAGS	HCR_RW
+
+#define CPTR_EL2_RES1	(UL(0xff) | _BITUL(9) | _BITUL(12) | _BITUL(13))
+#define CPTR_EL2_TZ	_BITUL(8)
+
+#define ID_AA64PFR0_GIC_SHIFT		24
+#define ID_AA64PFR0_SVE_SHIFT		32
+
+#define ID_AA64DFR0_PMUVER_SHIFT	8
+#define ID_AA64DFR0_PMSVER_SHIFT	32
+
+#define ID_AA64MMFR1_LOR_SHIFT		16
+
+#define ICC_SRE_EL2_SRE		(1 << 0)
+#define ICC_SRE_EL2_ENABLE	(1 << 3)
+
+#define SYS_ICC_SRE_EL2				sys_reg(3, 4, 12, 9, 5)
+#define SYS_ICH_HCR_EL2				sys_reg(3, 4, 12, 11, 0)
+
+#define SYS_PMBIDR_EL1				sys_reg(3, 0, 9, 10, 7)
+
+#define SYS_PMSCR_EL2				sys_reg(3, 4, 9, 9, 0)
+
+#define SYS_LORC_EL1				sys_reg(3, 0, 10, 4, 3)
+#define SYS_PMBIDR_EL1_P_SHIFT		4
+
+#define SYS_PMSCR_EL2_PA_SHIFT		4
+#define SYS_PMSCR_EL2_PCT_SHIFT		6
+
+#define MDCR_EL2_E2PB_MASK	(UL(0x3))
+#define MDCR_EL2_E2PB_SHIFT	(UL(12))
+
+#define MDCR_EL2_TPMS		(1 << 14)
+
+#define SYS_ZCR_EL2				sys_reg(3, 4, 1, 2, 0)
+#define ZCR_ELx_LEN_MASK		0x1ff
+
 #endif /* _ASMARM64_SYSREG_H_ */

@@ -112,6 +112,141 @@ run_main:
 	bl	exit
 	b	halt
 
+install_el2_stub:
+	/*
+	 * When VHE is not in use, early init of EL2 and EL1 needs to be
+	 * done here.
+	 * When VHE _is_ in use, EL1 will not be used in the host and
+	 * requires no configuration, and all non-hyp-specific EL2 setup
+	 * will be done via the _EL1 system register aliases in __cpu_setup.
+	 */
+	ldr	x0, =SCTLR_EL1_RES1
+	msr	sctlr_el1, x0
+
+	/* Coprocessor traps. */
+	mov	x0, #0x33ff
+	msr	cptr_el2, x0                    // Disable copro. traps to EL2
+
+	/* SVE register access */
+	mrs	x1, id_aa64pfr0_el1
+	ubfx	x1, x1, #ID_AA64PFR0_SVE_SHIFT, #4
+	cbz	x1, 7f
+
+	bic	x0, x0, #CPTR_EL2_TZ            // Also disable SVE traps
+	msr	cptr_el2, x0                    // Disable copro. traps to EL2
+	isb
+	mov	x1, #ZCR_ELx_LEN_MASK           // SVE: Enable full vector
+	msr_s	SYS_ZCR_EL2, x1                 // length for EL1.
+
+	/* Hypervisor stub */
+7:
+	msr	vbar_el2, xzr
+
+	/* spsr */
+	mov	x0, #(PSR_F_BIT | PSR_I_BIT | PSR_A_BIT | PSR_D_BIT |\
+			PSR_MODE_EL1h)
+	msr	spsr_el2, x0
+	msr	elr_el2, lr
+
+	eret
+
+el2_setup:
+	msr	SPsel, #1                       // We want to use SP_EL{1,2}
+	mrs	x0, CurrentEL
+	cmp	x0, #CurrentEL_EL2
+	b.eq	1f
+	ldr	x0, =SCTLR_EL1_RES1
+	msr	sctlr_el1, x0
+	isb
+	ret
+1:
+	ldr	x0, =SCTLR_EL2_RES1
+	msr	sctlr_el2, x0
+
+	/* Hyp configuration. */
+	ldr	x0, =HCR_HOST_NVHE_FLAGS
+	msr	hcr_el2, x0
+	isb
+
+	/*
+	* Allow Non-secure EL1 and EL0 to access physical timer and counter.
+	* This is not necessary for VHE, since the host kernel runs in EL2,
+	* Note that when HCR_EL2.E2H == 1, CNTHCTL_EL2 has the same bit layout
+	* as CNTKCTL_EL1, and CNTKCTL_EL1 accessing instructions are redefined
+	* to access CNTHCTL_EL2. This allows the kernel designed to run at EL1
+	* to transparently mess with the EL0 bits via CNTKCTL_EL1 access in
+	* EL2.
+	*/
+	mrs	x0, cnthctl_el2
+	/* Enable EL1 physical timers. */
+	orr	x0, x0, #3
+	msr	cnthctl_el2, x0
+
+	/* Clear the timer virtual offset. */
+	msr	cntvoff_el2, xzr
+
+	/* GICv3 system register access */
+	mrs	x0, id_aa64dfr0_el1
+	ubfx	x0, x0, #ID_AA64PFR0_GIC_SHIFT, #4
+	cbz	x0, 3f
+
+	mrs_s	x0, SYS_ICC_SRE_EL2
+	orr	x0, x0, #ICC_SRE_EL2_SRE        // Set ICC_SRE_EL2.SRE==1
+	orr	x0, x0, #ICC_SRE_EL2_ENABLE     // Set ICC_SRE_EL2.Enable==1
+	msr_s	SYS_ICC_SRE_EL2, x0
+	isb                                     // Make sure SRE is now set
+	mrs_s	x0, SYS_ICC_SRE_EL2            // Read SRE back,
+	tbz	x0, #0, 3f                      // and check that it sticks
+	msr_s	SYS_ICH_HCR_EL2, xzr            // Reset ICC_HCR_EL2 to defaults
+3:
+	/* Populate ID registers. */
+	mrs	x0, midr_el1
+	mrs	x1, mpidr_el1
+	msr	vpidr_el2, x0
+	msr	vmpidr_el2, x1
+
+	/* EL2 debug */
+	mrs	x1, id_aa64dfr0_el1
+	sbfx	x0, x1, #ID_AA64DFR0_PMUVER_SHIFT, #4
+	cmp	x0, #1
+	b.lt	4f                              // Skip if no PMU present
+	mrs	x0, pmcr_el0                    // Disable debug access traps
+	ubfx	x0, x0, #11, #5                 // to EL2 and allow access to
+4:
+	csel	x3, xzr, x0, lt                 // all PMU counters from EL1
+
+	/* Statistical profiling */
+	ubfx	x0, x1, #ID_AA64DFR0_PMSVER_SHIFT, #4
+	cbz	x0, 7f                          // Skip if SPE not present
+	mrs_s	x4, SYS_PMBIDR_EL1              // If SPE available at EL2,
+	and	x4, x4, #(1 << SYS_PMBIDR_EL1_P_SHIFT)
+	cbnz	x4, 5f                          // then permit sampling of physical
+	mov	x4, #(1 << SYS_PMSCR_EL2_PCT_SHIFT | \
+			1 << SYS_PMSCR_EL2_PA_SHIFT)
+	msr_s	SYS_PMSCR_EL2, x4               // addresses and physical counter
+5:
+	mov	x1, #(MDCR_EL2_E2PB_MASK << MDCR_EL2_E2PB_SHIFT)
+	orr	x3, x3, x1                      // If we don't have VHE, then
+	b	6f                              // use EL1&0 translation.
+
+	orr	x3, x3, #MDCR_EL2_TPMS          // and disable access from EL1
+6:
+	msr	mdcr_el2, x3                    // Configure debug traps
+
+	/* LORegions */
+	mrs	x1, id_aa64mmfr1_el1
+	ubfx	x0, x1, #ID_AA64MMFR1_LOR_SHIFT, 4
+	cbz	x0, 7f
+	msr_s	SYS_LORC_EL1, xzr
+7:
+	/* Stage-2 translation */
+	msr	vttbr_el2, xzr
+
+	cbz	x2, install_el2_stub
+
+	isb
+	ret
+
 /*
  * Used by cpu0 to setup the system and start the actual test.
  * x0 is the address of the dtb
@@ -121,13 +256,14 @@ run_main:
  */
 .globl primary_entry
 primary_entry:
-	/* set up stack */
-	mov	x4, #1
-	msr	spsel, x4
-	isb
-	mov	sp, x2
+	mov	x20, x0
+	mov	x21, x1
+	mov	x22, x2
 
-        /* Clean + invalidate the code */
+	/* Clean + invalidate the dtb segment */
+	dcache_by_line_op civac, sy, x0, x3, x6, x7
+
+	/* Clean + invalidate the code */
 	adrp	x4, _text
 	ldr	x4, [x4, :lo12:_text]
 	adrp	x5, _etext
@@ -135,28 +271,58 @@ primary_entry:
 	sub	x5, x5, x4
 	dcache_by_line_op civac, sy, x4, x5, x6, x7
 
-        /* Clean + invalidate the dtb segment */
-	dcache_by_line_op civac, sy, x0, x3, x6, x7
+	/* Clean + invalidate the code */
+	adrp	x4, _data
+	ldr	x4, [x4, :lo12:_data]
+	adrp	x5, _edata
+	ldr	x5, [x5, :lo12:_edata]
+	sub	x5, x5, x4
+	dcache_by_line_op civac, sy, x4, x5, x6, x7
 
 	/* Invalidate Icache */
 	ic	iallu
-	isb
-
-	/* Disable cache, Icache and MMU */
-	mrs	x4, sctlr_el1
-	bic	x4, x4, SCTLR_EL1_C
-	bic	x4, x4, SCTLR_EL1_I
-	bic	x4, x4, SCTLR_EL1_M
-	msr	sctlr_el1, x4
 	isb
 
 	/* Invalidate TLB */
 	tlbi	vmalle1
 	dsb	nsh
 
+	/* Turn off Dcache and MMU */
+	mrs	x0, CurrentEL
+	cmp	x0, #CurrentEL_EL2
+	b.ne	1f
+	/* Disable cache, Icache and MMU */
+	mrs	x0, sctlr_el2
+	bic	x0, x0, SCTLR_EL1_C
+	bic	x0, x0, SCTLR_EL1_I
+	bic	x0, x0, SCTLR_EL1_M
+	msr	sctlr_el2, x0
+	isb
+	b	2f
+1:
+	/* Disable cache, Icache and MMU */
+	mrs	x0, sctlr_el1
+	bic	x0, x0, SCTLR_EL1_C
+	bic	x0, x0, SCTLR_EL1_I
+	bic	x0, x0, SCTLR_EL1_M
+	msr	sctlr_el1, x4
+	isb
+2:
+	bl	el2_setup
+
+	mov	x0, x20
+	mov	x1, x21
+	mov	x2, x22
+
 	/* zero and set up stack */
-	sub	x4, x2, #THREAD_SIZE
-	zero_range x4, x2
+	and	x4, x2, #THREAD_MASK
+	zero_range	x4, x2
+
+        /* set up stack */
+	mov	x4, #1
+	msr	spsel, x4
+	isb
+	mov	sp, x2
 
 	bl	setup
 	b	run_main
@@ -186,6 +352,11 @@ psci_invoke_smc:
 
 .globl secondary_entry
 secondary_entry:
+	mrs	x0, CurrentEL
+	cmp	x0, CurrentEL_EL2
+	b.ne	1f
+	bl	el2_setup
+
 	/* Enable FP/ASIMD */
 	mov	x0, #(3 << 20)
 	msr	cpacr_el1, x0
